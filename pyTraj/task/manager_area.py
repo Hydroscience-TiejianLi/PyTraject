@@ -128,6 +128,7 @@ class TaskManager_area(object):
                 trajs.clear()
                 part += 1
 
+            end_tasks()
             print('finished!')
 
-end_tasks()
+
