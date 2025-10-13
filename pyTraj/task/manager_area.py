@@ -121,8 +121,6 @@ class TaskManager_area(object):
                 while len(trajs) < counts_sum:
                     continue
 
-                end_tasks()
-
                 with closing(Saver(os.path.join(save_root, "%d%02d-%d" % (year, month, part)))) as saver:
                     for traj in trajs:
                         saver.save(traj)
@@ -131,3 +129,5 @@ class TaskManager_area(object):
                 part += 1
 
             print('finished!')
+
+end_tasks()
