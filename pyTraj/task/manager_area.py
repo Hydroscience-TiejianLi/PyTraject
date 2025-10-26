@@ -14,6 +14,7 @@ import os
 import traceback
 import time
 import numpy as np
+from tqdm import tqdm
 
 default_zs = Config.DEFAULT_ZS
 
@@ -110,21 +111,72 @@ class TaskManager_area(object):
             #如果任务个数太多超过bs(默认10000)，则任务分组，存储到不同的shapefile中。
             for s in range(0, count, bs):
                 e = min(count, s + bs)
+            
+                # 修正：每批的“预期任务数”应为这一批各点的层数之和
+                expected = int(np.sum(counts[s:e]))
+                if expected == 0:
+                    print(f"Part {part + 1}: points [{s}–{e}) has no tasks, skip.")
+                    part += 1
+                    continue
+            
+                print(f"Running part {part + 1}: processing points {s}–{e} (Total points: {e}/{count})")
+                sys.stdout.flush()
+            
+                # 生成当前批次的任务；修正：counts[i] 而不是 counts[i+s]
+                def task_generator(s0, e0):
+                    for i in range(s0, e0):
+                        # 这一格要算多少个层，就发多少任务
+                        for z in self.zs[:counts[i]]:
+                            yield i, z
+            
                 gen = task_generator(s, e)
+            
+                # 预热提交，避免工作进程空闲
                 for _ in range(Config.NUM_WORKERS * 2):
                     try:
                         i, z = next(gen)
                     except StopIteration:
                         break
                     add_task(i, z, gen)
-
-                while len(trajs) < counts_sum:
-                    continue
-
+            
+                # 用 tqdm 展示这一批的进度，并加“无进展超时保护”
+                bar = tqdm(total=expected, desc=f"Part {part} in progress")
+                step = 0          # 连续“无新增结果”的次数
+                last_done = 0     # 上次观测到的完成数量
+            
+                # 注意：这一批的完成定义为 len(trajs) 达到 expected
+                while len(trajs) < expected:
+                    # 实时推进进度条
+                    done_now = len(trajs)
+                    bar.update(done_now - last_done)
+            
+                    if done_now == last_done:
+                        step += 1
+                    else:
+                        step = 0
+                        last_done = done_now
+            
+                    # 每 60 秒检查一次；连续 30 次（~30 分钟）无进展则超时跳出
+                    time.sleep(60)
+                    print(f"\nMonitoring progress... (no change count: {step})")
+                    sys.stdout.flush()
+                    if step >= 30:
+                        print("Timeout reached — exiting current loop to prevent freeze.")
+                        break
+            
+                # 关闭进度条（如果提前超时也补齐可见进度）
+                bar.update(max(0, len(trajs) - last_done))
+                bar.close()
+            
+                print(f"Part {part + 1} completed. Saving results...")
+                sys.stdout.flush()
                 with closing(Saver(os.path.join(save_root, "%d%02d-%d" % (year, month, part)))) as saver:
                     for traj in trajs:
                         saver.save(traj)
-
+                print("Successfully saved this part.")
+                sys.stdout.flush()
+            
+                # 清空，为下一个批次做准备
                 trajs.clear()
                 part += 1
 
