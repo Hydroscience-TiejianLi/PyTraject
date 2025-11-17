@@ -45,7 +45,7 @@ def parserNC(ncpath, dtype='float32'):
     data[:, :, :, :, 4] = dataset_q.variables['q'][:][:, :, :, :] 
     #data[:, :, :, :, 4] += dataset_q_l.variables['clwc'][:][:, :, :, :]
     #data[:, :, :, :, 4] += dataset_q_i.variables['ciwc'][:][:, :, :, :]
-
+    data = data[:, ::-1, :, :]
     return times,levels,lons,lats,variables,data
 
 #解析2dnc 指定nc 文件，返回解析出来的数据集
@@ -67,5 +67,5 @@ def parserNC_2d(ncpath, dtype='float32'):
     data_2d = np.zeros((days*24//Config.GRID[1],len(lats),len(lons),1),dtype=dtype)
 
     data_2d[:, :, :, 0] = dataset.variables['sp'][:][:, :, :] / 100 # hPa
-
+    data = data[:, ::-1, :, :]
     return times,lons,lats,variables_2d,data_2d
